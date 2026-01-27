@@ -36,3 +36,8 @@ void EcatManager::disconnectMaster()
     // stop
     m_Master.stop();
 }
+
+void EcatManager::launchServoMove(float ratio)
+{
+    m_Master.launchServoMove(ratio);
+}

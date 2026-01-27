@@ -17,6 +17,16 @@ EcatWidget::EcatWidget(QWidget* parent)
         // connect failed
         return;
     }
+
+    connect(ui->pushButton, &QPushButton::clicked,
+            this, [this]() {
+                int sliderValue = ui->verticalSlider->value();
+                int diff        = ui->verticalSlider->maximum() - ui->verticalSlider->minimum();
+
+                float ratio = (float)sliderValue / diff;
+
+                m_Manager->launchServoMove(ratio);
+            });
 }
 
 EcatWidget::~EcatWidget()

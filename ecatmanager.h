@@ -16,6 +16,8 @@ public:
     bool connectMaster(const QString& ifname);
     void disconnectMaster();
 
+    void launchServoMove(float ratio);
+
 signals:
 
 private:

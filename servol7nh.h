@@ -29,8 +29,11 @@ public:
     virtual void stop() override;
 
     void setTargetPosition(int32_t pos);
+    void setRelativeMove(bool isAbsMove);
 
-private:
+    void setDoMove(bool doMove) { m_doMove = doMove; }
+
+public:
 #pragma pack(push, 1)
     struct Outputs_PP {
         uint16_t controlWord;
@@ -43,6 +46,9 @@ private:
 
 private:
     bool waitForState(uint16_t statusMask, uint16_t expectedStatus, int timeOutMs = 10'000);
+
+private:
+    bool m_doMove = false;
 };
 
 #endif // SERVOL7NH_H

@@ -21,7 +21,7 @@ int setupL7NH(uint16 slaveId)
 
     int wkc = 0;
 
-    int8_t mode  = static_cast<int8_t>(ModeServoL7NH::Velocity);
+    int8_t mode  = static_cast<int8_t>(ModeServoL7NH::ProfilePosition);
     wkc         += ec_SDOwrite(slaveId, 0x6060, 0, FALSE,
                                sizeof(mode), &mode, EC_TIMEOUTRXM);
 
@@ -77,9 +77,8 @@ bool EcatMaster::init(const std::string& ifname)
         auto& slave = ec_slave[i];
 
         // servo L7NH
-        if (slave.eep_man == 0x00007595
-            && slave.eep_id == 0x00010001) {
-            // PO2SOconfig
+        if (checkL7NH(slave)) {
+            // setup PO2SOconfig function
             slave.PO2SOconfig = setupL7NH;
 
             // make_unique
@@ -147,18 +146,64 @@ void EcatMaster::stop()
     ec_close();
 }
 
+void EcatMaster::launchServoMove(float ratio)
+{
+    int   servoId = 1;
+    auto* servo   = static_cast<ServoL7NH*>(m_Slaves[servoId].get());
+
+    if (servo == nullptr) {
+        return;
+    }
+
+    static const int minPosition = 0;
+    static const int maxPosition = 10'000'000;
+
+    const int32_t targetPosition = static_cast<int32_t>(ratio * (maxPosition - minPosition));
+    servo->setTargetPosition(targetPosition);
+}
+
 void EcatMaster::processLoop()
 {
-    constexpr int cycleTimeUs = 1000; // 1ms
+    constexpr int cycleTimeUs   = 1'000; // 1ms
+    constexpr int counterPeriod = 5'000;
+
+    int32_t        targetPos  = 2'621'440;
+    const uint32_t profileVel = 1'310'720;
+    const uint32_t profileAcc = 2'621'440;
+    const uint32_t profileDec = 2'621'440;
+
+    int counter = 0;
 
     while (m_Running) {
+        // if (++counter >= counterPeriod) {
+        //     int idL7NH = 1;
+        //     if (checkL7NH(ec_slave[idL7NH])) {
+        //         auto* outputsL7NH = (ServoL7NH::Outputs_PP*)ec_slave[idL7NH].outputs;
+
+        //         outputsL7NH->controlWord |= (1 << 6);
+        //         outputsL7NH->controlWord &= ~(1 << 4);
+
+        //         ec_send_processdata();
+        //         m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
+
+        //         outputsL7NH->controlWord |= (1 << 4);
+        //         outputsL7NH->targetPos    = targetPos;
+        //         outputsL7NH->profileVel   = profileVel;
+        //         outputsL7NH->profileAcc   = profileAcc;
+        //         outputsL7NH->profileDec   = profileDec;
+        //     }
+
+        //     counter    = 0;
+        //     targetPos *= -1;
+        // }
+
         ec_send_processdata();
         m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
 
         for (int i = 1; i <= ec_slavecount; ++i) {
-            if (m_Slaves[i] != nullptr) {
-                m_Slaves[i]->processData();
-            }
+            if (m_Slaves[i] == nullptr) continue;
+
+            m_Slaves[i]->processData();
         }
 
         // sleep

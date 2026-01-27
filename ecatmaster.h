@@ -27,11 +27,19 @@ public:
     bool start();
     void stop();
 
+    void launchServoMove(float ratio);
+
 private:
     void processLoop();
     bool reqOpState();
     void ecatCheck();
     void slavesCheck();
+
+    bool checkL7NH(const ec_slavet& slave)
+    {
+        return slave.eep_man == 0x00007595
+               && slave.eep_id == 0x00010001;
+    }
 
 private:
     std::atomic<bool> m_Running { false };
