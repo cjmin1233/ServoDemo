@@ -1,6 +1,56 @@
 #include "ecatmaster.h"
+#include "servol7nh.h"
 
 #include <iostream>
+
+/** timeout value in us for return "Operational" state */
+#define EC_TIMEOUTOP 50000
+
+#define EC_TIMEOUTCONFIG (EC_TIMEOUTSTATE * 4)
+
+int setupL7NH(uint16 slaveId)
+{
+    std::cout << "[setupL7NH] setup servo" << std::endl;
+
+    std::string slave_name(ec_slave[slaveId].name);
+    std::string prefix("L7NH");
+
+    if (slave_name.find(prefix, 0) != 0) {
+        return 0;
+    }
+
+    int wkc = 0;
+
+    int8_t mode  = static_cast<int8_t>(ModeServoL7NH::Velocity);
+    wkc         += ec_SDOwrite(slaveId, 0x6060, 0, FALSE,
+                               sizeof(mode), &mode, EC_TIMEOUTRXM);
+
+    uint8_t  nEntries    = 0;
+    uint16_t rxpdoIndex  = 0x1601;
+    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
+    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 1, FALSE, sizeof(rxpdoIndex), &rxpdoIndex, EC_TIMEOUTRXM);
+    nEntries             = 1;
+    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
+
+    // pdo mapping
+    uint32_t pdoEntries[] = {
+        0x60400010, // Controlword (0x6040, sub 0, 16 bits)
+        0x607A0020, // Target Position (0x607A, sub 0, 32 bits)
+        0x60810020, // Profile Velocity (0x6081, sub 0, 32 bits)
+        0x60830020, // Profile Acceleration (0x6083, sub 0, 32 bits)
+        0x60840020  // Profile Deceleration (0x6084, sub 0, 32 bits)
+    };
+    nEntries = 0;
+
+    wkc      += ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
+    nEntries  = sizeof(pdoEntries) / sizeof(pdoEntries[0]);
+    for (int i = 0; i < nEntries; ++i) {
+        wkc += ec_SDOwrite(slaveId, rxpdoIndex, i + 1, FALSE, sizeof(pdoEntries[i]), &pdoEntries[i], EC_TIMEOUTRXM);
+    }
+    wkc += ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
+
+    return wkc;
+}
 
 bool EcatMaster::init(const std::string& ifname)
 {
@@ -21,6 +71,8 @@ bool EcatMaster::init(const std::string& ifname)
 
     std::cout << "[EcatMaster::init] " << ec_slavecount << " slaves found" << std::endl;
 
+    m_Slaves.clear();
+    m_Slaves.resize(ec_slavecount + 1);
     for (int i = 1; i <= ec_slavecount; ++i) {
         auto& slave = ec_slave[i];
 
@@ -28,6 +80,12 @@ bool EcatMaster::init(const std::string& ifname)
         if (slave.eep_man == 0x00007595
             && slave.eep_id == 0x00010001) {
             // PO2SOconfig
+            slave.PO2SOconfig = setupL7NH;
+
+            // make_unique
+            m_Slaves[i] = std::make_unique<ServoL7NH>(i);
+        } else {
+            m_Slaves[i] = nullptr;
         }
     }
 
@@ -36,7 +94,7 @@ bool EcatMaster::init(const std::string& ifname)
 
     std::cout << "[EcatMaster::init] Slaves mapped, state to SAFE_OP" << std::endl;
 
-    ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE * 4);
+    ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTCONFIG);
 
     m_ExpectedWKC = (ec_group[m_CurrentGroup].outputsWKC * 2) + ec_group[m_CurrentGroup].inputsWKC;
     std::cout << "[EcatMaster::init] Expected WKC : " << m_ExpectedWKC << std::endl;
@@ -53,9 +111,9 @@ bool EcatMaster::start()
     m_Running = true;
 
     for (int i = 1; i <= ec_slavecount; ++i) {
-        auto& slave = ec_slave[i];
-
-        // TODO: slave start;
+        if (m_Slaves[i] != nullptr) {
+            m_Slaves[i]->start();
+        }
     }
 
     m_Worker       = std::thread(&EcatMaster::processLoop, this);
@@ -76,9 +134,9 @@ void EcatMaster::stop()
     if (m_ErrorHandler.joinable()) m_ErrorHandler.join();
 
     for (int i = 1; i <= ec_slavecount; ++i) {
-        auto& slave = ec_slave[i];
-
-        // TODO: slave stop;
+        if (m_Slaves[i] != nullptr) {
+            m_Slaves[i]->stop();
+        }
     }
 
     ec_send_processdata();
@@ -97,7 +155,11 @@ void EcatMaster::processLoop()
         ec_send_processdata();
         m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
 
-        // TODO: slave processData;
+        for (int i = 1; i <= ec_slavecount; ++i) {
+            if (m_Slaves[i] != nullptr) {
+                m_Slaves[i]->processData();
+            }
+        }
 
         // sleep
         std::this_thread::sleep_for(std::chrono::microseconds(cycleTimeUs));
@@ -118,7 +180,7 @@ bool EcatMaster::reqOpState()
     // wait for all slaves to reach OP state
     int chk = 200;
     do {
-        ec_statecheck(0, EC_STATE_OPERATIONAL, 50000);
+        ec_statecheck(0, EC_STATE_OPERATIONAL, EC_TIMEOUTOP);
     } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
 
     // check if all slaves are in OP state

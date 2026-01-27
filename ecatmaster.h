@@ -7,6 +7,8 @@
 #include <thread>
 #include <vector>
 
+#include "slave.h"
+
 extern "C" {
 #include "ethercat.h"
 }
@@ -43,7 +45,7 @@ private:
     std::atomic<int> m_CurrentWKC { 0 };
     int              m_CurrentGroup = 0;
 
-    // std::vector<std::unique_ptr<Slave>> m_Slaves = {};
+    std::vector<std::unique_ptr<Slave>> m_Slaves = {};
 };
 
 #endif // ECATMASTER_H
