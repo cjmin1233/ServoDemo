@@ -3,20 +3,33 @@
 
 #include "slave.h"
 
-// EtherCAT CiA402 Modes of Operation (0x6060)
-enum class ModeServoL7NH : int8_t {
-    ProfilePosition    = 1, // PP : Profile Position Mode
-    Velocity           = 3, // PV : Profile Velocity Mode
-    Torque             = 4, // PT : Profile Torque Mode
-    Homing             = 6, // HM : Homing Mode
-    CyclicSyncPosition = 8, // CSP : Cyclic Synchronous Position
-    CyclicSyncVelocity = 9, // CSV : Cyclic Synchronous Velocity
-    CyclicSyncTorque   = 10 // CST : Cyclic Synchronous Torque
-};
-
-class EcatMaster;
+bool checkL7NH(int slaveId);
 
 class ServoL7NH : public Slave {
+public:
+#pragma pack(push, 1) // 메모리 패딩 방지 (중요!)
+
+    // Master -> Slave (RxPDO)
+    typedef struct {
+        uint16_t control_word;    // 0x6040
+        int8_t   modes_of_op;     // 0x6060
+        int32_t  target_position; // 0x607A
+        int32_t  target_velocity; // 0x60FF
+        uint32_t digital_outputs; // 0x60FE:01
+    } RxPDO;
+
+    // Slave -> Master (TxPDO)
+    typedef struct {
+        uint16_t status_word;      // 0x6041
+        int8_t   modes_of_op_disp; // 0x6061
+        int32_t  actual_position;  // 0x6064
+        int32_t  actual_velocity;  // 0x606C
+        int16_t  actual_torque;    // 0x6077
+        uint32_t digital_inputs;   // 0x60FD
+    } TxPDO;
+
+#pragma pack(pop)
+
 public:
     ServoL7NH(uint16_t slaveId)
         : Slave(slaveId)
@@ -24,31 +37,23 @@ public:
     }
 
     virtual void processData() override;
-
     virtual void start() override;
     virtual void stop() override;
 
-    void setTargetPosition(int32_t pos);
-    void setRelativeMove(bool isAbsMove);
+    static bool checkL7NH(int slaveId);
+    static int  setupL7NH(uint16 slaveId);
+
+    // void setTargetPosition(int32_t pos);
+    // void setRelativeMove(bool isAbsMove);
 
     void setDoMove(bool doMove) { m_doMove = doMove; }
 
-public:
-#pragma pack(push, 1)
-    struct Outputs_PP {
-        uint16_t controlWord;
-        int32_t  targetPos;
-        uint32_t profileVel;
-        uint32_t profileAcc;
-        uint32_t profileDec;
-    };
-#pragma pack(pop)
-
-private:
-    bool waitForState(uint16_t statusMask, uint16_t expectedStatus, int timeOutMs = 10'000);
+    void stateCheck();
 
 private:
     bool m_doMove = false;
+
+    int m_stateCheckCounter = 0;
 };
 
 #endif // SERVOL7NH_H

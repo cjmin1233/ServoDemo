@@ -28,6 +28,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ecatmaster.h ecatmaster.cpp
         slave.h
         servol7nh.h servol7nh.cpp
+        cia402.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET ServoDemo APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

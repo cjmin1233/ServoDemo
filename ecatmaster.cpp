@@ -1,4 +1,5 @@
 #include "ecatmaster.h"
+#include "cia402.h"
 #include "servol7nh.h"
 
 #include <iostream>
@@ -7,50 +8,6 @@
 #define EC_TIMEOUTOP 50000
 
 #define EC_TIMEOUTCONFIG (EC_TIMEOUTSTATE * 4)
-
-int setupL7NH(uint16 slaveId)
-{
-    std::cout << "[setupL7NH] setup servo" << std::endl;
-
-    std::string slave_name(ec_slave[slaveId].name);
-    std::string prefix("L7NH");
-
-    if (slave_name.find(prefix, 0) != 0) {
-        return 0;
-    }
-
-    int wkc = 0;
-
-    int8_t mode  = static_cast<int8_t>(ModeServoL7NH::ProfilePosition);
-    wkc         += ec_SDOwrite(slaveId, 0x6060, 0, FALSE,
-                               sizeof(mode), &mode, EC_TIMEOUTRXM);
-
-    uint8_t  nEntries    = 0;
-    uint16_t rxpdoIndex  = 0x1601;
-    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
-    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 1, FALSE, sizeof(rxpdoIndex), &rxpdoIndex, EC_TIMEOUTRXM);
-    nEntries             = 1;
-    wkc                 += ec_SDOwrite(slaveId, 0x1c12, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
-
-    // pdo mapping
-    uint32_t pdoEntries[] = {
-        0x60400010, // Controlword (0x6040, sub 0, 16 bits)
-        0x607A0020, // Target Position (0x607A, sub 0, 32 bits)
-        0x60810020, // Profile Velocity (0x6081, sub 0, 32 bits)
-        0x60830020, // Profile Acceleration (0x6083, sub 0, 32 bits)
-        0x60840020  // Profile Deceleration (0x6084, sub 0, 32 bits)
-    };
-    nEntries = 0;
-
-    wkc      += ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
-    nEntries  = sizeof(pdoEntries) / sizeof(pdoEntries[0]);
-    for (int i = 0; i < nEntries; ++i) {
-        wkc += ec_SDOwrite(slaveId, rxpdoIndex, i + 1, FALSE, sizeof(pdoEntries[i]), &pdoEntries[i], EC_TIMEOUTRXM);
-    }
-    wkc += ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(nEntries), &nEntries, EC_TIMEOUTRXM);
-
-    return wkc;
-}
 
 bool EcatMaster::init(const std::string& ifname)
 {
@@ -77,11 +34,11 @@ bool EcatMaster::init(const std::string& ifname)
         auto& slave = ec_slave[i];
 
         // servo L7NH
-        if (checkL7NH(slave)) {
+        if (ServoL7NH::checkL7NH(i)) {
             // setup PO2SOconfig function
-            slave.PO2SOconfig = setupL7NH;
+            slave.PO2SOconfig = &ServoL7NH::setupL7NH;
 
-            // make_unique
+            // create slave instance
             m_Slaves[i] = std::make_unique<ServoL7NH>(i);
         } else {
             m_Slaves[i] = nullptr;
@@ -107,13 +64,13 @@ bool EcatMaster::start()
         return false;
     }
 
-    m_Running = true;
-
     for (int i = 1; i <= ec_slavecount; ++i) {
-        if (m_Slaves[i] != nullptr) {
-            m_Slaves[i]->start();
-        }
+        if (m_Slaves[i] == nullptr) continue;
+
+        m_Slaves[i]->start();
     }
+
+    m_Running = true;
 
     m_Worker       = std::thread(&EcatMaster::processLoop, this);
     m_ErrorHandler = std::thread(&EcatMaster::ecatCheck, this);
@@ -133,9 +90,9 @@ void EcatMaster::stop()
     if (m_ErrorHandler.joinable()) m_ErrorHandler.join();
 
     for (int i = 1; i <= ec_slavecount; ++i) {
-        if (m_Slaves[i] != nullptr) {
-            m_Slaves[i]->stop();
-        }
+        if (m_Slaves[i] == nullptr) continue;
+
+        m_Slaves[i]->stop();
     }
 
     ec_send_processdata();
@@ -159,44 +116,14 @@ void EcatMaster::launchServoMove(float ratio)
     static const int maxPosition = 10'000'000;
 
     const int32_t targetPosition = static_cast<int32_t>(ratio * (maxPosition - minPosition));
-    servo->setTargetPosition(targetPosition);
+    // servo->setTargetPosition(targetPosition);
 }
 
 void EcatMaster::processLoop()
 {
-    constexpr int cycleTimeUs   = 1'000; // 1ms
-    constexpr int counterPeriod = 5'000;
-
-    int32_t        targetPos  = 2'621'440;
-    const uint32_t profileVel = 1'310'720;
-    const uint32_t profileAcc = 2'621'440;
-    const uint32_t profileDec = 2'621'440;
-
-    int counter = 0;
+    constexpr int cycleTimeUs = 1'000; // 1ms
 
     while (m_Running) {
-        // if (++counter >= counterPeriod) {
-        //     int idL7NH = 1;
-        //     if (checkL7NH(ec_slave[idL7NH])) {
-        //         auto* outputsL7NH = (ServoL7NH::Outputs_PP*)ec_slave[idL7NH].outputs;
-
-        //         outputsL7NH->controlWord |= (1 << 6);
-        //         outputsL7NH->controlWord &= ~(1 << 4);
-
-        //         ec_send_processdata();
-        //         m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
-
-        //         outputsL7NH->controlWord |= (1 << 4);
-        //         outputsL7NH->targetPos    = targetPos;
-        //         outputsL7NH->profileVel   = profileVel;
-        //         outputsL7NH->profileAcc   = profileAcc;
-        //         outputsL7NH->profileDec   = profileDec;
-        //     }
-
-        //     counter    = 0;
-        //     targetPos *= -1;
-        // }
-
         ec_send_processdata();
         m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
 
@@ -275,7 +202,6 @@ void EcatMaster::slavesCheck()
                       << " ALStatusCode = " << slave.ALstatuscode << std::endl;
 
             ec_group[m_CurrentGroup].docheckstate = TRUE;
-
             // one of the slaves is not in OP state
             if (slave.state == (EC_STATE_SAFE_OP + EC_STATE_ERROR)) {
                 std::cout << "[EcatMaster::slavesCheck] ERROR : slave " << i
@@ -285,6 +211,7 @@ void EcatMaster::slavesCheck()
                 ec_writestate(i);
 
                 ec_statecheck(i, EC_STATE_PRE_OP, EC_TIMEOUTSTATE);
+
             } else if (slave.state == EC_STATE_INIT) {
                 std::cout << "[EcatMaster::slavesCheck] INFO : slave " << i
                           << " INIT -> PRE_OP" << std::endl;
