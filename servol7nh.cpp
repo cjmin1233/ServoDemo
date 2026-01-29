@@ -52,6 +52,14 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     entryCount  = 1;
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
+    uint32_t profileVel = 1'310'720;
+    uint32_t profileAcc = 2'621'440;
+    uint32_t profileDec = 2'621'440;
+
+    success &= (ec_SDOwrite(slaveId, cia402::IDX_PROFILE_VELOCITY, 0, FALSE, sizeof(profileVel), &profileVel, EC_TIMEOUTRXM) > 0);
+    success &= (ec_SDOwrite(slaveId, cia402::IDX_PROFILE_ACCEL, 0, FALSE, sizeof(profileAcc), &profileAcc, EC_TIMEOUTRXM) > 0);
+    success &= (ec_SDOwrite(slaveId, cia402::IDX_PROFILE_DECEL, 0, FALSE, sizeof(profileDec), &profileDec, EC_TIMEOUTRXM) > 0);
+
     std::cout << "[ServoL7NH::setupL7NH] Result: " << (success ? "Success" : "Failed") << std::endl;
     return success;
 }
@@ -59,11 +67,7 @@ void ServoL7NH::processData()
 {
     stateCheck();
 
-    // const uint32_t profileVel = 1'310'720;
-    // const uint32_t profileAcc = 2'621'440;
-    // const uint32_t profileDec = 2'621'440;
-
-    // auto* statusWord = reinterpret_cast<uint16_t*>(ec_slave[m_slaveId].inputs);
+    const uint16_t& statusWord = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs)->status_word;
     // std::cout << "[ServoL7NH::processData] servo status: " << *statusWord << std::endl;
 
     // bool isFault = *statusWord & (1 << 3);
@@ -71,33 +75,28 @@ void ServoL7NH::processData()
     //     std::cout << "[ServoL7NH::processData] servo fault detected" << std::endl;
     // }
 
-    /*
-        bool isTargetReached = *statusWord & (1 << 10);
+    bool isTargetReached = statusWord & (cia402::SW_BIT_TARGET_REACHED);
 
-        if (isTargetReached) {
-            auto* pdo_outputs = reinterpret_cast<Outputs_PP*>(ec_slave[m_slaveId].outputs);
+    if (isTargetReached) {
+        auto* rxpdo = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
 
-            setRelativeMove(false);
+        // setRelativeMove(false);
 
-            pdo_outputs->controlWord |= (1 << 5);
-            pdo_outputs->controlWord &= ~(1 << 4);
+        // rxpdo->control_word |= (1 << 5);
+        rxpdo->control_word &= ~(cia402::CW_BIT_NEW_SETPOINT);
 
-            ec_send_processdata();
-            ec_receive_processdata(EC_TIMEOUTRET);
+        ec_send_processdata();
+        ec_receive_processdata(EC_TIMEOUTRET);
 
-            pdo_outputs->controlWord |= (1 << 4);
-
-            pdo_outputs->profileVel = profileVel;
-            pdo_outputs->profileAcc = profileAcc;
-            pdo_outputs->profileDec = profileDec;
-        }
-    */
+        rxpdo->control_word |= (cia402::CW_BIT_NEW_SETPOINT);
+    }
 }
 
 void ServoL7NH::start()
 {
-    RxPDO* rxpdo       = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
-    rxpdo->modes_of_op = static_cast<int8_t>(cia402::Mode::PP);
+    RxPDO* rxpdo         = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
+    rxpdo->modes_of_op   = static_cast<int8_t>(cia402::Mode::PP);
+    rxpdo->control_word &= ~(cia402::CW_BIT_ABS_REL);
 }
 
 void ServoL7NH::stop()
@@ -106,12 +105,12 @@ void ServoL7NH::stop()
     rxpdo->control_word = cia402::CW_SHUTDOWN;
 }
 
-// void ServoL7NH::setTargetPosition(int32_t pos)
-// {
-//     auto* pdo_outputs = reinterpret_cast<Outputs_PP*>(ec_slave[m_slaveId].outputs);
+void ServoL7NH::setTargetPosition(int32_t pos)
+{
+    RxPDO* rxpdo = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
 
-//     pdo_outputs->targetPos = pos;
-// }
+    rxpdo->target_position = pos;
+}
 
 // void ServoL7NH::setRelativeMove(bool relative)
 // {

@@ -29,6 +29,12 @@ constexpr uint16_t SW_STATE_QUICK_STOP_ACTIVE  = 0x0007;
 constexpr uint16_t SW_STATE_FAULT_REACTION     = 0x000F;
 constexpr uint16_t SW_STATE_FAULT              = 0x0008;
 
+// --- Control Word (0x6040) 주요 개별 비트 마스크 ---
+constexpr uint16_t CW_BIT_NEW_SETPOINT           = (1 << 4); // 4번 비트: 신규 목표값 적용 (Rising Edge 시 작동)
+constexpr uint16_t CW_BIT_CHANGE_SET_IMMEDIATELY = (1 << 5); // 5번 비트: 즉시 변경 여부
+constexpr uint16_t CW_BIT_ABS_REL                = (1 << 6); // 6번 비트: 절대(0) / 상대(1) 위치 제어
+constexpr uint16_t CW_BIT_HALT                   = (1 << 8); // 8번 비트: 일시 정지
+
 // Status Word Bit Flags
 constexpr uint16_t SW_BIT_VOLTAGE_ENABLED = (1 << 4);
 constexpr uint16_t SW_BIT_WARNING_OCCURED = (1 << 7);

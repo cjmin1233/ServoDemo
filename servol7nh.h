@@ -43,7 +43,7 @@ public:
     static bool checkL7NH(int slaveId);
     static int  setupL7NH(uint16 slaveId);
 
-    // void setTargetPosition(int32_t pos);
+    void setTargetPosition(int32_t pos);
     // void setRelativeMove(bool isAbsMove);
 
     void setDoMove(bool doMove) { m_doMove = doMove; }
