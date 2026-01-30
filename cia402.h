@@ -39,6 +39,7 @@ constexpr uint16_t CW_BIT_HALT                   = (1 << 8); // 8번 비트: 일
 constexpr uint16_t SW_BIT_VOLTAGE_ENABLED = (1 << 4);
 constexpr uint16_t SW_BIT_WARNING_OCCURED = (1 << 7);
 constexpr uint16_t SW_BIT_TARGET_REACHED  = (1 << 10);
+constexpr uint16_t SW_BIT_SET_POINT_ACK   = (1 << 12);
 
 // --- [3] Modes of Operation (0x6060) ---
 enum class Mode : int8_t {

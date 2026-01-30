@@ -35,6 +35,8 @@ bool EcatMaster::init(const std::string& ifname)
 
         // servo L7NH
         if (ServoL7NH::checkL7NH(i)) {
+            m_ServoId = i;
+
             // setup PO2SOconfig function
             slave.PO2SOconfig = &ServoL7NH::setupL7NH;
 
@@ -103,10 +105,13 @@ void EcatMaster::stop()
     ec_close();
 }
 
-void EcatMaster::launchServoMove(float ratio)
+void EcatMaster::servoMovePosition(float ratio)
 {
-    int   servoId = 1;
-    auto* servo   = static_cast<ServoL7NH*>(m_Slaves[servoId].get());
+    if (m_ServoId <= 0) {
+        return;
+    }
+
+    auto* servo = static_cast<ServoL7NH*>(m_Slaves[m_ServoId].get());
 
     if (servo == nullptr) {
         return;
@@ -124,15 +129,14 @@ void EcatMaster::processLoop()
     constexpr int cycleTimeUs = 1'000; // 1ms
 
     while (m_Running) {
-        ec_send_processdata();
-        m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
-
         for (int i = 1; i <= ec_slavecount; ++i) {
             if (m_Slaves[i] == nullptr) continue;
 
             m_Slaves[i]->processData();
         }
 
+        ec_send_processdata();
+        m_CurrentWKC.store(ec_receive_processdata(EC_TIMEOUTRET));
         // sleep
         std::this_thread::sleep_for(std::chrono::microseconds(cycleTimeUs));
     }

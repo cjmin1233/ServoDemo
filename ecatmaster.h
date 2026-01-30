@@ -27,7 +27,7 @@ public:
     bool start();
     void stop();
 
-    void launchServoMove(float ratio);
+    void servoMovePosition(float ratio);
 
 private:
     void processLoop();
@@ -48,6 +48,8 @@ private:
     int              m_CurrentGroup = 0;
 
     std::vector<std::unique_ptr<Slave>> m_Slaves = {};
+
+    int m_ServoId = 0;
 };
 
 #endif // ECATMASTER_H

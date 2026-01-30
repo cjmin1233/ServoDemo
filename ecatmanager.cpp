@@ -39,5 +39,5 @@ void EcatManager::disconnectMaster()
 
 void EcatManager::launchServoMove(float ratio)
 {
-    m_Master.launchServoMove(ratio);
+    m_Master.servoMovePosition(ratio);
 }

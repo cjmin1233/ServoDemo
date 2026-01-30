@@ -63,32 +63,53 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     std::cout << "[ServoL7NH::setupL7NH] Result: " << (success ? "Success" : "Failed") << std::endl;
     return success;
 }
+
 void ServoL7NH::processData()
 {
-    stateCheck();
+    auto*     rxpdo       = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
+    uint16_t& controlWord = rxpdo->control_word;
 
-    const uint16_t& statusWord = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs)->status_word;
-    // std::cout << "[ServoL7NH::processData] servo status: " << *statusWord << std::endl;
+    const TxPDO*    txpdo       = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs);
+    const uint16_t& statusWord  = txpdo->status_word;
+    const auto&     currentMode = static_cast<cia402::Mode>(txpdo->modes_of_op_disp);
 
-    // bool isFault = *statusWord & (1 << 3);
-    // if (isFault) {
-    //     std::cout << "[ServoL7NH::processData] servo fault detected" << std::endl;
-    // }
+    if ((statusWord & cia402::SW_STATE_MASK2) == cia402::SW_STATE_OP_ENABLED) {
+        // main operation
+        switch (currentMode) {
+        case cia402::Mode::PP: {
+            // Profile position
+            const bool isNewSetpointRequested = controlWord & cia402::CW_BIT_NEW_SETPOINT;
+            const bool isSetpointAck          = statusWord & cia402::SW_BIT_SET_POINT_ACK;
 
-    bool isTargetReached = statusWord & (cia402::SW_BIT_TARGET_REACHED);
+            if (isNewSetpointRequested) {
+                if (isSetpointAck) {
+                    // new setpoint requested and acknowledged
+                    controlWord &= ~(cia402::CW_BIT_NEW_SETPOINT);
+                }
+            } else if (m_flagNewSetpoint) {
+                // request new setpoint
+                controlWord |= cia402::CW_BIT_NEW_SETPOINT;
+                // flag off
+                m_flagNewSetpoint = false;
+            }
 
-    if (isTargetReached) {
-        auto* rxpdo = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
+            break;
+        }
+        case cia402::Mode::HM: {
+            // Homing
+            break;
+        }
+        default:
+            break;
+        }
 
-        // setRelativeMove(false);
-
-        // rxpdo->control_word |= (1 << 5);
-        rxpdo->control_word &= ~(cia402::CW_BIT_NEW_SETPOINT);
-
-        ec_send_processdata();
-        ec_receive_processdata(EC_TIMEOUTRET);
-
-        rxpdo->control_word |= (cia402::CW_BIT_NEW_SETPOINT);
+        if (statusWord & cia402::SW_BIT_TARGET_REACHED) {
+            // target reached
+        }
+    }
+    // check state machine if not operational yet
+    else {
+        stateCheck();
     }
 }
 
@@ -109,53 +130,49 @@ void ServoL7NH::setTargetPosition(int32_t pos)
 {
     RxPDO* rxpdo = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
 
-    rxpdo->target_position = pos;
+    rxpdo->modes_of_op      = static_cast<int8_t>(cia402::Mode::PP);
+    rxpdo->target_position  = pos;
+    rxpdo->control_word    |= ~(cia402::CW_BIT_ABS_REL); // absolute move
+
+    m_flagNewSetpoint = true;
 }
-
-// void ServoL7NH::setRelativeMove(bool relative)
-// {
-//     auto* pdo_outputs = reinterpret_cast<Outputs_PP*>(ec_slave[m_slaveId].outputs);
-
-//     if (relative) {
-//         pdo_outputs->controlWord |= 1 << 6;
-//     } else {
-//         pdo_outputs->controlWord &= ~(1 << 6);
-//     }
-// }
 
 void ServoL7NH::stateCheck()
 {
+    static constexpr int      stateCheckCycleCounter = 20;
+    static constexpr uint16_t bit4to7                = 0xF0;
+    static constexpr uint16_t bit0to3                = 0x0F;
+
     if (ec_slave[m_slaveId].state != EC_STATE_OPERATIONAL) {
         return;
     }
 
-    if (--m_stateCheckCounter >= 0) return;
+    if (m_stateCheckCounter > 0) {
+        --m_stateCheckCounter;
+        return;
+    }
 
     uint16_t&       controlWord = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs)->control_word;
     const uint16_t& statusWord  = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs)->status_word;
 
-    if ((statusWord & cia402::SW_STATE_MASK2) == cia402::SW_STATE_OP_ENABLED) {
-        // servo op enabled, early return
-        return;
-    }
-
     if ((statusWord & cia402::SW_STATE_MASK1) == cia402::SW_STATE_SWITCH_ON_DISABLED) {
-        controlWord = controlWord & 0xf0 | cia402::CW_SHUTDOWN;
+        controlWord = controlWord & bit4to7 | cia402::CW_SHUTDOWN;
 
-        m_stateCheckCounter = 20;
+        m_stateCheckCounter = stateCheckCycleCounter;
     } else if ((statusWord & cia402::SW_STATE_MASK2) == cia402::SW_STATE_READY_SWITCH_ON) {
-        controlWord = controlWord & 0xf0 | cia402::CW_SWITCH_ON;
+        controlWord = controlWord & bit4to7 | cia402::CW_SWITCH_ON;
 
-        m_stateCheckCounter = 20;
+        m_stateCheckCounter = stateCheckCycleCounter;
     } else if ((statusWord & cia402::SW_STATE_MASK2) == cia402::SW_STATE_SWITCHED_ON) {
-        if ((controlWord & 0x0f) == cia402::CW_ENABLE_OP) {
+        if ((controlWord & bit0to3) == cia402::CW_ENABLE_OP) {
             // Already tried to enable op. Drop to shutdown
-            controlWord = controlWord & 0xf0 | cia402::CW_SHUTDOWN;
+            controlWord = controlWord & bit4to7 | cia402::CW_SHUTDOWN;
 
             std::cout << "[ServoL7NH::stateCheck] Already tried to enable op. Drop to shutdown" << std::endl;
         } else {
-            controlWord = controlWord & 0xf0 | cia402::CW_ENABLE_OP;
+            controlWord = controlWord & bit4to7 | cia402::CW_ENABLE_OP;
         }
-        m_stateCheckCounter = 50;
+
+        m_stateCheckCounter = stateCheckCycleCounter * 2;
     }
 }

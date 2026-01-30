@@ -46,12 +46,13 @@ public:
     void setTargetPosition(int32_t pos);
     // void setRelativeMove(bool isAbsMove);
 
-    void setDoMove(bool doMove) { m_doMove = doMove; }
+    // void setDoMove(bool doMove) { m_doMove = doMove; }
 
     void stateCheck();
 
 private:
-    bool m_doMove = false;
+    // bool m_doMove          = false;
+    bool m_flagNewSetpoint = false;
 
     int m_stateCheckCounter = 0;
 };
