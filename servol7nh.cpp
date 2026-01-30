@@ -22,39 +22,63 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     int success = 1; // SOEM 콜백은 보통 성공 시 1을 기대함
 
     // --- [STEP 1] RXPDO Mapping Content (0x1600) 설정 ---
-    // 내용을 먼저 채워야 합니다!
     uint16_t rxpdoIndex = cia402::IDX_RXPDO_MAPPING_1;
     uint8_t  zero       = 0;
 
     // 매핑 개수 0으로 초기화 (수정 모드 진입)
     success &= (ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
 
-    uint32_t pdoEntries[] = {
+    uint32_t rxpdoEntries[] = {
         cia402::ENTRY_RX_CONTROL_WORD,
         cia402::ENTRY_RX_MODES_OF_OP,
         cia402::ENTRY_RX_TARGET_POSITION,
         cia402::ENTRY_RX_TARGET_VELOCITY,
         cia402::ENTRY_RX_DIGITAL_OUTPUTS
     };
-    uint8_t entryCount = sizeof(pdoEntries) / sizeof(pdoEntries[0]);
+    uint8_t entryCount = sizeof(rxpdoEntries) / sizeof(rxpdoEntries[0]);
 
     for (uint8_t i = 0; i < entryCount; ++i) {
-        success &= (ec_SDOwrite(slaveId, rxpdoIndex, i + 1, FALSE, sizeof(pdoEntries[i]), &pdoEntries[i], EC_TIMEOUTRXM) > 0);
+        success &= (ec_SDOwrite(slaveId, rxpdoIndex, i + 1, FALSE, sizeof(rxpdoEntries[i]), &rxpdoEntries[i], EC_TIMEOUTRXM) > 0);
     }
 
     // 매핑 개수 확정
     success &= (ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
-    // --- [STEP 2] Sync Manager 2 Assignment (0x1C12) 설정 ---
-    // 내용이 채워진 0x1600을 실제 채널에 연결합니다.
+    // --- [STEP 2] TXPDO Mapping Content (0x1A00) 설정 ---
+    uint16_t txpdoIndex  = cia402::IDX_TXPDO_MAPPING_1;
+    success             &= (ec_SDOwrite(slaveId, txpdoIndex, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
+
+    uint32_t txpdoEntries[] = {
+        cia402::ENTRY_TX_STATUS_WORD,
+        cia402::ENTRY_TX_MODES_OF_OP_DISP,
+        cia402::ENTRY_TX_ACTUAL_POSITION,
+        cia402::ENTRY_TX_ACTUAL_VELOCITY,
+        cia402::ENTRY_TX_ACTUAL_TORQUE,
+        cia402::ENTRY_TX_DIGITAL_INPUTS
+    };
+    entryCount = sizeof(txpdoEntries) / sizeof(txpdoEntries[0]);
+
+    for (uint8_t i = 0; i < entryCount; ++i) {
+        success &= (ec_SDOwrite(slaveId, txpdoIndex, i + 1, FALSE, sizeof(txpdoEntries[i]), &txpdoEntries[i], EC_TIMEOUTRXM) > 0);
+    }
+    success &= (ec_SDOwrite(slaveId, txpdoIndex, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
+
+    // --- [STEP 3] Sync Manager 2 (RxPDO) & 3 (TxPDO) Assignment 설정 ---
+    // RxPDO
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 1, FALSE, sizeof(rxpdoIndex), &rxpdoIndex, EC_TIMEOUTRXM) > 0);
     entryCount  = 1;
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
-    uint32_t profileVel = 1'310'720;
-    uint32_t profileAcc = 2'621'440;
-    uint32_t profileDec = 2'621'440;
+    // TxPDO
+    success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM3_TXPDO_ASSIGN, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
+    success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM3_TXPDO_ASSIGN, 1, FALSE, sizeof(txpdoIndex), &txpdoIndex, EC_TIMEOUTRXM) > 0);
+    entryCount  = 1;
+    success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM3_TXPDO_ASSIGN, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
+
+    uint32_t profileVel = 2'621'440;
+    uint32_t profileAcc = 5'242'880;
+    uint32_t profileDec = 5'242'880;
 
     success &= (ec_SDOwrite(slaveId, cia402::IDX_PROFILE_VELOCITY, 0, FALSE, sizeof(profileVel), &profileVel, EC_TIMEOUTRXM) > 0);
     success &= (ec_SDOwrite(slaveId, cia402::IDX_PROFILE_ACCEL, 0, FALSE, sizeof(profileAcc), &profileAcc, EC_TIMEOUTRXM) > 0);
@@ -66,12 +90,12 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
 
 void ServoL7NH::processData()
 {
-    auto*     rxpdo       = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
-    uint16_t& controlWord = rxpdo->control_word;
+    auto* rxpdo       = reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs);
+    auto& controlWord = rxpdo->control_word;
 
-    const TxPDO*    txpdo       = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs);
-    const uint16_t& statusWord  = txpdo->status_word;
-    const auto&     currentMode = static_cast<cia402::Mode>(txpdo->modes_of_op_disp);
+    const TxPDO* txpdo       = reinterpret_cast<TxPDO*>(ec_slave[m_slaveId].inputs);
+    const auto&  statusWord  = txpdo->status_word;
+    const auto&  currentMode = static_cast<cia402::Mode>(txpdo->modes_of_op_disp);
 
     if ((statusWord & cia402::SW_STATE_MASK2) == cia402::SW_STATE_OP_ENABLED) {
         // main operation
@@ -95,11 +119,15 @@ void ServoL7NH::processData()
 
             break;
         }
-        case cia402::Mode::HM: {
-            // Homing
+        case cia402::Mode::PV:
+        case cia402::Mode::PT:
+        case cia402::Mode::HM:
+        case cia402::Mode::CSP:
+        case cia402::Mode::CST:
+        case cia402::Mode::CSV:
             break;
-        }
         default:
+            std::cout << "[ServoL7NH::processData] invalid mode : " << static_cast<int8_t>(currentMode) << std::endl;
             break;
         }
 
@@ -132,7 +160,7 @@ void ServoL7NH::setTargetPosition(int32_t pos)
 
     rxpdo->modes_of_op      = static_cast<int8_t>(cia402::Mode::PP);
     rxpdo->target_position  = pos;
-    rxpdo->control_word    |= ~(cia402::CW_BIT_ABS_REL); // absolute move
+    rxpdo->control_word    &= ~(cia402::CW_BIT_ABS_REL); // absolute move
 
     m_flagNewSetpoint = true;
 }
