@@ -9,7 +9,8 @@ EcatWidget::EcatWidget(QWidget* parent)
 {
     ui->setupUi(this);
 
-    const QString ifname = "\\Device\\NPF_{133B147A-976D-4DD4-A9FC-3360A1F84C90}";
+    // const QString ifname = "\\Device\\NPF_{133B147A-976D-4DD4-A9FC-3360A1F84C90}";
+    const QString ifname = "\\Device\\NPF_{F80FCB79-A945-4A5A-BD77-B5076391E949}";
 
     m_Manager = new EcatManager(this);
 

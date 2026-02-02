@@ -117,11 +117,7 @@ void EcatMaster::servoMovePosition(float ratio)
         return;
     }
 
-    static const int minPosition = 0;
-    static const int maxPosition = 10'000'000;
-
-    const int32_t targetPosition = static_cast<int32_t>(ratio * (maxPosition - minPosition));
-    servo->setTargetPosition(targetPosition);
+    servo->setTargetPosition(ratio);
 }
 
 void EcatMaster::processLoop()

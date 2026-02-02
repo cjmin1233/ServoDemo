@@ -12,7 +12,7 @@ public:
     // Master -> Slave (RxPDO)
     typedef struct {
         uint16_t control_word;    // 0x6040
-        int8_t   modes_of_op;     // 0x6060
+        int8_t   mode;            // 0x6060
         int32_t  target_position; // 0x607A
         int32_t  target_velocity; // 0x60FF
         uint32_t digital_outputs; // 0x60FE:01
@@ -20,12 +20,12 @@ public:
 
     // Slave -> Master (TxPDO)
     typedef struct {
-        uint16_t status_word;      // 0x6041
-        int8_t   modes_of_op_disp; // 0x6061
-        int32_t  actual_position;  // 0x6064
-        int32_t  actual_velocity;  // 0x606C
-        int16_t  actual_torque;    // 0x6077
-        uint32_t digital_inputs;   // 0x60FD
+        uint16_t status_word;     // 0x6041
+        int8_t   mode_disp;       // 0x6061
+        int32_t  actual_position; // 0x6064
+        int32_t  actual_velocity; // 0x606C
+        int16_t  actual_torque;   // 0x6077
+        uint32_t digital_inputs;  // 0x60FD
     } TxPDO;
 
 #pragma pack(pop)
@@ -43,18 +43,25 @@ public:
     static bool checkL7NH(int slaveId);
     static int  setupL7NH(uint16 slaveId);
 
+    void setTargetPosition(float ratio);
     void setTargetPosition(int32_t pos);
-    // void setRelativeMove(bool isAbsMove);
-
-    // void setDoMove(bool doMove) { m_doMove = doMove; }
-
-    void stateCheck();
 
 private:
-    // bool m_doMove          = false;
+    void stateCheck();
+    void processHM(RxPDO* rxpdo, const TxPDO* txpdo);
+
+private:
+    static constexpr uint32_t s_encoderResolution = 262'144;
+
     bool m_flagNewSetpoint = false;
+    bool m_flagHomingStart = false;
 
     int m_stateCheckCounter = 0;
+
+    bool     m_isHomingSettling      = false;
+    int      m_homingSettlingCounter = 0;
+    int      m_homingStableCounter   = 0;
+    uint32_t m_posWindow             = 0;
 };
 
 #endif // SERVOL7NH_H
