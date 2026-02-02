@@ -47,8 +47,12 @@ public:
     void setTargetPosition(int32_t pos);
 
 private:
-    void stateCheck();
+    void stateCheck(RxPDO* rxpdo, const TxPDO* txpdo);
+    void processPP(RxPDO* rxpdo, const TxPDO* txpdo);
     void processHM(RxPDO* rxpdo, const TxPDO* txpdo);
+
+    RxPDO*       ptrRxPDO() { return reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].inputs); }
+    const TxPDO* ptrTxPDO() const { return reinterpret_cast<const TxPDO*>(ec_slave[m_slaveId].inputs); }
 
 private:
     static constexpr uint32_t s_encoderResolution = 262'144;
