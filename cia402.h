@@ -11,10 +11,10 @@
 namespace cia402 {
 
 // --- [1] Control Word Commands (0x6040) ---
-constexpr uint16_t CW_SHUTDOWN    = 0x0006; // Ready to Switch On
-constexpr uint16_t CW_SWITCH_ON   = 0x0007; // Switched On
-constexpr uint16_t CW_ENABLE_OP   = 0x000F; // Operation Enabled (Servo ON)
-constexpr uint16_t CW_FAULT_RESET = 0x0080;
+constexpr uint16_t CW_SHUTDOWN    = 0x0006; // Command: Ready to Switch On
+constexpr uint16_t CW_SWITCH_ON   = 0x0007; // Command: Switched On
+constexpr uint16_t CW_ENABLE_OP   = 0x000F; // Command: Operation Enabled (Servo ON)
+constexpr uint16_t CW_FAULT_RESET = 0x0080; // Command: Fault Reset (Rising Edge)
 
 // --- [2] Status Word Masks & States (0x6041) ---
 constexpr uint16_t SW_STATE_MASK1 = 0x004F;
@@ -29,22 +29,22 @@ constexpr uint16_t SW_STATE_QUICK_STOP_ACTIVE  = 0x0007;
 constexpr uint16_t SW_STATE_FAULT_REACTION     = 0x000F;
 constexpr uint16_t SW_STATE_FAULT              = 0x0008;
 
-// --- Control Word (0x6040) 주요 개별 비트 마스크 ---
-constexpr uint16_t CW_BIT_NEW_SETPOINT           = (1 << 4); // 4번 비트: 신규 목표값 적용 (PP 모드, Rising edge)
-constexpr uint16_t CW_BIT_HOMING_START           = (1 << 4); // 4번 비트: 원점 복귀 시작 (HM 모드)
-constexpr uint16_t CW_BIT_CHANGE_SET_IMMEDIATELY = (1 << 5); // 5번 비트: 즉시 변경 여부
-constexpr uint16_t CW_BIT_ABS_REL                = (1 << 6); // 6번 비트: 절대(0) / 상대(1) 위치 제어
-constexpr uint16_t CW_BIT_HALT                   = (1 << 8); // 8번 비트: 일시 정지
+// --- Control Word (0x6040) Bit Flags ---
+constexpr uint16_t CW_BIT_NEW_SETPOINT           = (1 << 4); // bit 4: Apply new setpoint (PP mode, Rising edge)
+constexpr uint16_t CW_BIT_HOMING_START           = (1 << 4); // bit 4: Start homing operation (HM mode)
+constexpr uint16_t CW_BIT_CHANGE_SET_IMMEDIATELY = (1 << 5); // bit 5: Apply setpoint immediately (PP mode)
+constexpr uint16_t CW_BIT_ABS_REL                = (1 << 6); // bit 6: Use Absolute(0) or Relative(1) position
+constexpr uint16_t CW_BIT_HALT                   = (1 << 8); // bit 8: Halt motion
 
-// Status Word Bit Flags
-constexpr uint16_t SW_BIT_VOLTAGE_ENABLED = (1 << 4);
-constexpr uint16_t SW_BIT_WARNING_OCCURED = (1 << 7);
-constexpr uint16_t SW_BIT_TARGET_REACHED  = (1 << 10);
-constexpr uint16_t SW_BIT_SET_POINT_ACK   = (1 << 12); // PP 모드에서 New Setpoint 수신 확인
+// --- Status Word (0x6041) Bit Flags ---
+constexpr uint16_t SW_BIT_VOLTAGE_ENABLED = (1 << 4);  // Drive voltage is enabled
+constexpr uint16_t SW_BIT_WARNING_OCCURED = (1 << 7);  // A warning is active
+constexpr uint16_t SW_BIT_TARGET_REACHED  = (1 << 10); // Target position has been reached
+constexpr uint16_t SW_BIT_SET_POINT_ACK   = (1 << 12); // Setpoint has been acknowledged (PP mode)
 
-// --- Homing Mode (HM) 관련 비트 ---
-constexpr uint16_t SW_BIT_HOMING_ATTAINED = (1 << 12); // homing 완료
-constexpr uint16_t SW_BIT_HOMING_ERROR    = (1 << 13); // homing 에러 발생
+// --- Homing Mode (HM) Specific Bits ---
+constexpr uint16_t SW_BIT_HOMING_ATTAINED = (1 << 12); // Homing procedure is completed
+constexpr uint16_t SW_BIT_HOMING_ERROR    = (1 << 13); // An error occurred during homing
 
 // --- [3] Modes of Operation (0x6060) ---
 enum class Mode : int8_t {
@@ -70,7 +70,6 @@ constexpr uint16_t IDX_PROFILE_ACCEL    = 0x6083;
 constexpr uint16_t IDX_PROFILE_DECEL    = 0x6084;
 constexpr uint16_t IDX_STOP_DECEL       = 0x6085;
 constexpr uint16_t IDX_DIGITAL_INPUTS   = 0x60FD;
-// constexpr uint16_t IDX_ENCODER_RESOLUTION = 0x2002;
 
 constexpr uint16_t IDX_HOME_OFFSET   = 0x607C;
 constexpr uint16_t IDX_HOMING_METHOD = 0x6098;
@@ -78,30 +77,30 @@ constexpr uint16_t IDX_HOMING_SPEED  = 0x6099;
 constexpr uint16_t IDX_HOMING_ACCEL  = 0x609A;
 
 // --- [5] RxPDO Mapping Objects (Master -> Slave) ---
-// 실제 어떤 데이터를 받을지 리스트를 작성하는 공간입니다.
+// Defines the content of data sent from Master to Slave.
 constexpr uint16_t IDX_RXPDO_MAPPING_1 = 0x1600;
 constexpr uint16_t IDX_RXPDO_MAPPING_2 = 0x1601;
 constexpr uint16_t IDX_RXPDO_MAPPING_3 = 0x1602;
 constexpr uint16_t IDX_RXPDO_MAPPING_4 = 0x1603;
 
 // --- [6] TxPDO Mapping Objects (Slave -> Master) ---
-// 슬레이브가 어떤 데이터를 보낼지 리스트를 작성하는 공간입니다.
+// Defines the content of data sent from Slave to Master.
 constexpr uint16_t IDX_TXPDO_MAPPING_1 = 0x1A00;
 constexpr uint16_t IDX_TXPDO_MAPPING_2 = 0x1A01;
 constexpr uint16_t IDX_TXPDO_MAPPING_3 = 0x1A02;
 constexpr uint16_t IDX_TXPDO_MAPPING_4 = 0x1A03;
 
 // --- [7] Sync Manager PDO Assignment Objects ---
-// 위에서 만든 매핑 리스트(1600, 1A00 등)를 실제 통신 채널(SM)에 할당합니다.
-constexpr uint16_t IDX_SM2_RXPDO_ASSIGN = 0x1C12; // SM2: 출력(Rx) 담당
-constexpr uint16_t IDX_SM3_TXPDO_ASSIGN = 0x1C13; // SM3: 입력(Tx) 담당
+// Assigns the PDO mapping objects (e.g., 0x1600, 0x1A00) to Sync Manager channels.
+constexpr uint16_t IDX_SM2_RXPDO_ASSIGN = 0x1C12; // SM2 for RxPDO (Outputs from Master)
+constexpr uint16_t IDX_SM3_TXPDO_ASSIGN = 0x1C13; // SM3 for TxPDO (Inputs to Master)
 
-// --- [참고] 매핑 시 사용되는 Sub-Index 규칙 ---
-// Sub-Index 0: 해당 매핑 객체에 담긴 오브젝트의 개수 (uint8_t)
-// Sub-Index 1~n: 실제 매핑될 오브젝트 정보 (uint32_t: Index/Subindex/BitLen 조합)
+// --- Note on PDO Mapping Sub-Indices ---
+// Sub-Index 0: Number of mapped objects in this PDO (uint8_t)
+// Sub-Index 1~n: Information of the mapped object (uint32_t: Index/Sub-Index/BitLength)
 
 // --- [8] RxPDO Mapping Entries (Master -> Slave) ---
-// 형식: Index(16bit) + SubIndex(8bit) + BitLen(8bit)
+// Format: Index(16bit) + SubIndex(8bit) + BitLength(8bit)
 
 // Control Word (0x6040:00, 16bit) -> 0x60400010
 constexpr uint32_t ENTRY_RX_CONTROL_WORD = 0x60400010;
@@ -139,11 +138,11 @@ constexpr uint32_t ENTRY_TX_ACTUAL_TORQUE = 0x60770010;
 constexpr uint32_t ENTRY_TX_DIGITAL_INPUTS = 0x60FD0020;
 
 // --- [10] Homing Methods (0x6098) ---
-constexpr int8_t HM_NEG_LIMIT_SWITCH_AND_INDEX = 1;  // (-)방향 리미트 스위치 접촉 후 Index Pulse 찾기
-constexpr int8_t HM_POS_LIMIT_SWITCH_AND_INDEX = 2;  // (+)방향 리미트 스위치 접촉 후 Index Pulse 찾기
-constexpr int8_t HM_HOME_SWITCH_NEG_AND_INDEX  = 11; // (-)방향으로 Home 스위치 접촉 후 Index Pulse 찾기
-constexpr int8_t HM_HOME_SWITCH_POS_AND_INDEX  = 7;  // (+)방향으로 Home 스위치 접촉 후 Index Pulse 찾기
-constexpr int8_t HM_CURRENT_POS_AS_HOME        = 35; // 현재 위치를 원점으로 설정 (이동 없음)
+constexpr int8_t HM_NEG_LIMIT_SWITCH_AND_INDEX = 1;  // Find index pulse after contacting negative limit switch
+constexpr int8_t HM_POS_LIMIT_SWITCH_AND_INDEX = 2;  // Find index pulse after contacting positive limit switch
+constexpr int8_t HM_HOME_SWITCH_NEG_AND_INDEX  = 11; // Find index pulse after contacting home switch in negative direction
+constexpr int8_t HM_HOME_SWITCH_POS_AND_INDEX  = 7;  // Find index pulse after contacting home switch in positive direction
+constexpr int8_t HM_CURRENT_POS_AS_HOME        = 35; // Set current position as home without movement
 
 } // namespace cia402
 

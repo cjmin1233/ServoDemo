@@ -19,13 +19,13 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     // check name
     if (std::string(ec_slave[slaveId].name).find("L7NH") != 0) return 0;
 
-    int success = 1; // SOEM 콜백은 보통 성공 시 1을 기대함
+    int success = 1; // SOEM callbacks expect 1 on success
 
     // --- [STEP 1] RXPDO Mapping Content (0x1600) ---
     uint16_t rxpdoIndex = cia402::IDX_RXPDO_MAPPING_1;
     uint8_t  zero       = 0;
 
-    // 매핑 개수 0으로 초기화 (수정 모드 진입)
+    // Set mapping count to 0 to enter modification mode
     success &= (ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
 
     uint32_t rxpdoEntries[] = {
@@ -41,10 +41,10 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
         success &= (ec_SDOwrite(slaveId, rxpdoIndex, i + 1, FALSE, sizeof(rxpdoEntries[i]), &rxpdoEntries[i], EC_TIMEOUTRXM) > 0);
     }
 
-    // 매핑 개수 확정
+    // Finalize the mapping count
     success &= (ec_SDOwrite(slaveId, rxpdoIndex, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
-    // --- [STEP 2] TXPDO Mapping Content (0x1A00) 설정 ---
+    // --- [STEP 2] TXPDO Mapping Content (0x1A00) ---
     uint16_t txpdoIndex  = cia402::IDX_TXPDO_MAPPING_1;
     success             &= (ec_SDOwrite(slaveId, txpdoIndex, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
 
@@ -63,7 +63,7 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     }
     success &= (ec_SDOwrite(slaveId, txpdoIndex, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
-    // --- [STEP 3] Sync Manager 2 (RxPDO) & 3 (TxPDO) Assignment 설정 ---
+    // --- [STEP 3] Sync Manager 2 (RxPDO) & 3 (TxPDO) Assignment ---
     // RxPDO
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
     success    &= (ec_SDOwrite(slaveId, cia402::IDX_SM2_RXPDO_ASSIGN, 1, FALSE, sizeof(rxpdoIndex), &rxpdoIndex, EC_TIMEOUTRXM) > 0);
@@ -255,15 +255,12 @@ void ServoL7NH::stateCheck()
 
 void ServoL7NH::processHM(RxPDO* rxpdo, const TxPDO* txpdo)
 {
-    //
     static constexpr int HOMING_SETTLING_TIMEOUT = 5000;
     static constexpr int HOMING_STABLE_COUNT     = 50;
 
     auto&       controlWord = rxpdo->control_word;
     const auto& statusWord  = txpdo->status_word;
-    const auto& currentMode = static_cast<cia402::Mode>(txpdo->mode_disp);
 
-    // Homing
     const bool isHomingStart    = controlWord & cia402::CW_BIT_HOMING_START;
     const bool isHomingAttained = statusWord & cia402::SW_BIT_HOMING_ATTAINED;
     const bool isHomingError    = statusWord & cia402::SW_BIT_HOMING_ERROR;
@@ -271,7 +268,6 @@ void ServoL7NH::processHM(RxPDO* rxpdo, const TxPDO* txpdo)
     if (isHomingError) {
         std::cout << "[ServoL7NH::processData] homing error occurred!" << std::endl;
 
-        // error handling logic
         controlWord        &= ~(cia402::CW_BIT_HOMING_START);
         m_flagHomingStart   = false;
         m_isHomingSettling  = false;
@@ -283,13 +279,13 @@ void ServoL7NH::processHM(RxPDO* rxpdo, const TxPDO* txpdo)
         controlWord |= cia402::CW_BIT_HOMING_START;
 
         m_flagHomingStart  = false;
-        m_isHomingSettling = false; // Homing 새로 시작 시 안정화 상태 초기화
+        m_isHomingSettling = false; // Reset settling state on new homing start
         return;
     }
 
     // 2. Homing processing
     if (isHomingStart) {
-        // 2-1. Homing Attained, 안정화 단계 진입
+        // 2-1. Homing Attained, enter settling phase
         if (isHomingAttained && !m_isHomingSettling) {
             std::cout << "[ServoL7NH::processHM] Homing attained. Start settling check..." << std::endl;
 
@@ -298,28 +294,28 @@ void ServoL7NH::processHM(RxPDO* rxpdo, const TxPDO* txpdo)
             m_homingStableCounter   = 0;
         }
 
-        // 2-2. 안정화 단계 로직
+        // 2-2. Settling phase logic
         if (m_isHomingSettling) {
-            --m_homingSettlingCounter; // 타임아웃 카운터 감소
+            --m_homingSettlingCounter; // Decrement timeout counter
 
             const int32_t  pos    = txpdo->actual_position;
             const uint32_t absPos = pos < 0 ? -pos : pos;
 
-            // Position Window 내에 있는지 확인
+            // Check if within the position window
             if (absPos <= m_posWindow) {
-                ++m_homingStableCounter; // 안정화 카운터 증가
+                ++m_homingStableCounter; // Increment stable counter
             } else {
-                m_homingStableCounter = 0; // 벗어나면 리셋
+                m_homingStableCounter = 0; // Reset if it moves out
             }
 
-            // 안정화 성공: 충분한 시간 동안 Window 내에 머무름
+            // Success: Remained stable within the window for enough time
             if (m_homingStableCounter >= HOMING_STABLE_COUNT) {
                 std::cout << "[ServoL7NH::processHM] Homing Succeeded (Stable in window)" << std::endl;
 
                 controlWord        &= ~(cia402::CW_BIT_HOMING_START);
                 m_isHomingSettling  = false;
             }
-            // 타임아웃 실패: 시간 내에 안정화되지 못함
+            // Failure: Timeout occurred before becoming stable
             else if (m_homingSettlingCounter <= 0) {
                 std::cout << "[ServoL7NH::processHM] Homing Failed (Timeout, not stable)" << std::endl;
 
