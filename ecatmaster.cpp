@@ -107,17 +107,24 @@ void EcatMaster::stop()
 
 void EcatMaster::servoMovePosition(float ratio)
 {
-    if (m_ServoId <= 0) {
-        return;
-    }
-
-    auto* servo = static_cast<ServoL7NH*>(m_Slaves[m_ServoId].get());
+    auto* servo = getPtrServo();
 
     if (servo == nullptr) {
         return;
     }
 
     servo->setTargetPosition(ratio);
+}
+
+void EcatMaster::setHome()
+{
+    auto* servo = getPtrServo();
+
+    if (servo == nullptr) {
+        return;
+    }
+
+    servo->setHome();
 }
 
 void EcatMaster::processLoop()
@@ -282,4 +289,13 @@ void EcatMaster::slavesCheck()
             }
         }
     }
+}
+
+ServoL7NH* EcatMaster::getPtrServo()
+{
+    if (m_ServoId <= 0) {
+        return nullptr;
+    }
+
+    return dynamic_cast<ServoL7NH*>(m_Slaves[m_ServoId].get());
 }

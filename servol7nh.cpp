@@ -91,7 +91,7 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     success &= (ec_SDOwrite(slaveId, cia402::IDX_STOP_DECEL, 0, FALSE, sizeof(stopDec), &stopDec, EC_TIMEOUTRXM) > 0);
 
     // Set homing objects
-    int32_t  homeOffset   = 0;
+    int32_t  homeOffset   = s_encoderResolution / 200;
     int8_t   homingMethod = cia402::HM_NEG_LIMIT_SWITCH_AND_INDEX;
     uint32_t spdSwitch    = s_encoderResolution;
     uint32_t spdZero      = s_encoderResolution / 10;
@@ -100,18 +100,13 @@ int ServoL7NH::setupL7NH(uint16 slaveId)
     success &= (ec_SDOwrite(slaveId, cia402::IDX_HOME_OFFSET, 0, FALSE, sizeof(homeOffset), &homeOffset, EC_TIMEOUTRXM) > 0);
     success &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_METHOD, 0, FALSE, sizeof(homingMethod), &homingMethod, EC_TIMEOUTRXM) > 0);
 
-    success &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_SPEED, 0, FALSE, sizeof(zero), &zero, EC_TIMEOUTRXM) > 0);
-
     success &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_SPEED, 1, FALSE, sizeof(spdSwitch), &spdSwitch, EC_TIMEOUTRXM) > 0);
     success &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_SPEED, 2, FALSE, sizeof(spdZero), &spdZero, EC_TIMEOUTRXM) > 0);
-
-    entryCount  = 2;
-    success    &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_SPEED, 0, FALSE, sizeof(entryCount), &entryCount, EC_TIMEOUTRXM) > 0);
 
     success &= (ec_SDOwrite(slaveId, cia402::IDX_HOMING_ACCEL, 0, FALSE, sizeof(homingAcc), &homingAcc, EC_TIMEOUTRXM) > 0);
 
     // etc...
-    uint32_t posWindow = 100;
+    uint32_t posWindow = s_encoderResolution / 200;
 
     success &= (ec_SDOwrite(slaveId, cia402::IDX_POSITION_WINDOW, 0, FALSE, sizeof(posWindow), &posWindow, EC_TIMEOUTRXM) > 0);
 
@@ -200,9 +195,23 @@ void ServoL7NH::setTargetPosition(int32_t pos)
 
     rxpdo->mode             = static_cast<int8_t>(cia402::Mode::PP);
     rxpdo->target_position  = pos;
-    rxpdo->control_word    &= ~(cia402::CW_BIT_ABS_REL); // Absolute move
+    rxpdo->control_word    &= ~(cia402::CW_BIT_ABS_REL);      // Absolute move
+    rxpdo->control_word    &= ~(cia402::CW_BIT_NEW_SETPOINT); // Clear new setpoint bit
 
     m_flagNewSetpoint = true;
+}
+
+void ServoL7NH::setHome()
+{
+    RxPDO* rxpdo = ptrRxPDO();
+
+    if (rxpdo == nullptr) return;
+
+    rxpdo->mode          = static_cast<int8_t>(cia402::Mode::HM); // Set to Homing Mode
+    rxpdo->control_word &= ~(cia402::CW_BIT_ABS_REL);             // Absolute move
+    rxpdo->control_word &= ~(cia402::CW_BIT_HOMING_START);        // Clear homing start bit
+
+    m_flagHomingStart = true;
 }
 
 void ServoL7NH::stateCheck(RxPDO* rxpdo, const TxPDO* txpdo)
@@ -341,6 +350,9 @@ void ServoL7NH::processHM(RxPDO* rxpdo, const TxPDO* txpdo)
 
                 controlWord        &= ~(cia402::CW_BIT_HOMING_START);
                 m_isHomingSettling  = false;
+
+                // return to 0
+                setTargetPosition(0);
             }
             // Failure: Timeout occurred before becoming stable
             else if (m_homingSettlingCounter <= 0) {

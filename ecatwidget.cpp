@@ -14,6 +14,10 @@ EcatWidget::EcatWidget(QWidget* parent)
 
     m_Manager = new EcatManager(this);
 
+    if (m_Manager == nullptr) {
+        return;
+    }
+
     if (!m_Manager->connectMaster(ifname)) {
         // connect failed
         return;
@@ -27,6 +31,11 @@ EcatWidget::EcatWidget(QWidget* parent)
                 float ratio = (float)sliderValue / diff;
 
                 m_Manager->launchServoMove(ratio);
+            });
+
+    connect(ui->btnHome, &QPushButton::clicked,
+            this, [this]() {
+                m_Manager->setHome();
             });
 }
 

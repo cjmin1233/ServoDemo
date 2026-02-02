@@ -39,6 +39,19 @@
     <string>PushButton</string>
    </property>
   </widget>
+  <widget class="QPushButton" name="btnHome">
+   <property name="geometry">
+    <rect>
+     <x>270</x>
+     <y>140</y>
+     <width>80</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>HOME</string>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>

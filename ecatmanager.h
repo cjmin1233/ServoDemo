@@ -17,6 +17,7 @@ public:
     void disconnectMaster();
 
     void launchServoMove(float ratio);
+    void setHome();
 
 signals:
 

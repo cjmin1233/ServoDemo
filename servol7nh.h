@@ -45,13 +45,14 @@ public:
 
     void setTargetPosition(float ratio);
     void setTargetPosition(int32_t pos);
+    void setHome();
 
 private:
     void stateCheck(RxPDO* rxpdo, const TxPDO* txpdo);
     void processPP(RxPDO* rxpdo, const TxPDO* txpdo);
     void processHM(RxPDO* rxpdo, const TxPDO* txpdo);
 
-    RxPDO*       ptrRxPDO() { return reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].inputs); }
+    RxPDO*       ptrRxPDO() { return reinterpret_cast<RxPDO*>(ec_slave[m_slaveId].outputs); }
     const TxPDO* ptrTxPDO() const { return reinterpret_cast<const TxPDO*>(ec_slave[m_slaveId].inputs); }
 
 private:

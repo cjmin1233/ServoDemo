@@ -41,3 +41,8 @@ void EcatManager::launchServoMove(float ratio)
 {
     m_Master.servoMovePosition(ratio);
 }
+
+void EcatManager::setHome()
+{
+    m_Master.setHome();
+}

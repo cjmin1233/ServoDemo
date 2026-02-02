@@ -13,6 +13,8 @@ extern "C" {
 #include "ethercat.h"
 }
 
+class ServoL7NH;
+
 class EcatMaster {
 public:
     EcatMaster() = default;
@@ -28,12 +30,15 @@ public:
     void stop();
 
     void servoMovePosition(float ratio);
+    void setHome();
 
 private:
     void processLoop();
     bool reqOpState();
     void ecatCheck();
     void slavesCheck();
+
+    ServoL7NH* getPtrServo();
 
 private:
     std::atomic<bool> m_Running { false };
